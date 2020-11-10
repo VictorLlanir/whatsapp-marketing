@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text.RegularExpressions;
 using System.Threading;
 using OfficeOpenXml;
 using OpenQA.Selenium;
@@ -12,7 +13,6 @@ namespace WhatsappMarketing
 {
     class Program
     {
-        private static readonly string CurrentDirectoryPath = Directory.GetCurrentDirectory();
         static void Main(string[] args)
         {
 
@@ -23,37 +23,101 @@ namespace WhatsappMarketing
             Console.WriteLine("");
 
             Console.WriteLine(">> LENDO MENSAGEM");
-            var messageFile = Directory.GetFiles(CurrentDirectoryPath, "message.txt").First();
-            var message = File.ReadAllLines(messageFile);
+            ReadMessage();
             Console.WriteLine("     [Ok] Mensagem lida!");
             Console.WriteLine("");
             Console.WriteLine("");
 
             Console.WriteLine(">> BUSCANDO CONTATOS");
+            GetContacts();
+            Console.WriteLine("     [Ok] Contatos guardados!");
+            Console.WriteLine("");
+            Console.WriteLine("");
+
+            Console.WriteLine(">> ABRINDO O WHATSAPP, AGUARDADO AUTENTICAÇÃO");
+            OpenChromeDriverAndWaitForAuthentication();
+            Console.WriteLine("     [Ok] Autenticado!");
+            Console.WriteLine("");
+            Console.WriteLine("");
+
+            Console.WriteLine(">> ENVIANDO MENSAGENS");
+            foreach (var contact in Contacts)
+            {
+                var couldNavigate = NavigateToContactUrl(contact.Number);
+                if (!couldNavigate)
+                {
+                    if (!string.IsNullOrEmpty(contact.SecondNumber))
+                        couldNavigate = NavigateToContactUrl(contact.SecondNumber);
+
+                    if (!couldNavigate)
+                    {
+                        Console.WriteLine($"     [ERRO] {contact.Name} - {contact.Number} / {contact.SecondNumber} (Número inválido)");
+                        Log($"[ERRO] {contact.Name} - {contact.Number} / {contact.SecondNumber} (Número inválido)\n");
+                        continue;
+                    }
+                }
+
+                SendMessage(contact);
+                RemoveContactFromWorksheet(contact);
+                Console.WriteLine($"     [Mensagem enviada] {contact.Name} - {contact.Number}");
+                Console.WriteLine("");
+                Console.WriteLine("");
+                Thread.Sleep(1000);
+            }
+        }
+        private static bool IsElementPresent(By by)
+        {
+            try
+            {
+                ChromeDriver.FindElement(by);
+                return true;
+            }
+            catch (NoSuchElementException)
+            {
+                return false;
+            }
+        }
+        private static bool IsAlertPresent()
+        {
+            try
+            {
+                ChromeDriver.SwitchTo().Alert();
+                return true;
+            }
+            catch (NoSuchElementException)
+            {
+                return false;
+            }
+        }
+        private static void Log(string logMessage) => File.AppendAllText($@"{CurrentDirectoryPath}\Log.txt", logMessage);
+        private static void ReadMessage()
+        {
+            var messageFile = Directory.GetFiles(CurrentDirectoryPath, "message.txt").First();
+            Message = File.ReadAllLines(messageFile);
+        }
+        private static void GetContacts()
+        {
             ExcelPackage.LicenseContext = LicenseContext.NonCommercial;
 
-            var contacts = new List<Contact>();
             var spreadsheetFilePath = Directory.GetFiles(CurrentDirectoryPath, "*.*").First(f => f.EndsWith(".xlsx") || f.EndsWith(".xls"));
             using (var package = new ExcelPackage(new FileInfo(spreadsheetFilePath.Split('/').Last())))
             {
                 var worksheet = package.Workbook.Worksheets.First();
                 var lastRow = worksheet.Dimension.End.Row + 1;
                 for (int i = 2; i < lastRow; i++)
-                    contacts.Add(new Contact(worksheet.Cells[$"A{i}"].Text, worksheet.Cells[$"B{i}"].Text));
+                    Contacts.Add(new Contact(worksheet.Cells[$"A{i}"].Text, worksheet.Cells[$"B{i}"].Text, worksheet.Cells[$"C{i}"].Text, i));
             }
-            Console.WriteLine("     [Ok] Contatos guardados!");
-            Console.WriteLine("");
-            Console.WriteLine("");
-
-            Console.WriteLine(">> ABRINDO O WHATSAPP, AGUARDADO AUTENTICAÇÃO");
+        }
+        private static void OpenChromeDriverAndWaitForAuthentication()
+        {
             var chromeOptions = new ChromeOptions();
             chromeOptions.AddArgument("--start-maximized");
             chromeOptions.AddArgument("user-agent=Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/61.0.3163.100 Safari/537.36");
-            var chromeDriver = new ChromeDriver(CurrentDirectoryPath, chromeOptions);
-            chromeDriver.Navigate().GoToUrl("https://web.whatsapp.com/");
+            ChromeDriver = new ChromeDriver(CurrentDirectoryPath, chromeOptions);
+            ChromeDriver.Navigate().GoToUrl("https://web.whatsapp.com/");
             try
             {
-                while (IsElementPresent(chromeDriver, By.ClassName("landing-title")))
+                while (IsElementPresent(By.ClassName("landing-title")))
                     Thread.Sleep(2000);
             }
             catch (Exception e)
@@ -61,80 +125,64 @@ namespace WhatsappMarketing
                 Console.WriteLine(e.Message);
                 throw;
             }
-            Console.WriteLine("     [Ok] Autenticado!");
-            Console.WriteLine("");
-            Console.WriteLine("");
-
-            Console.WriteLine(">> ENVIANDO MENSAGENS");
-            foreach (var contact in contacts)
-            {
-                chromeDriver.Navigate().GoToUrl($"http://web.whatsapp.com/send?phone={contact.Number}");
-                var personalMessage = message.Select(line => line.Replace("#nome", contact.Name)).ToList();
-
-                while (!IsElementPresent(chromeDriver, By.ClassName("copyable-text")))
-                    Thread.Sleep(1500);
-
-                if (IsAlertPresent(chromeDriver))
-                    chromeDriver.SwitchTo().Alert().Accept();
-
-                if (IsElementPresent(chromeDriver, By.XPath("/html/body/div[1]/div/span[2]/div/span/div/div/div/div/div/div[1]")))
-                {
-                    if (chromeDriver
-                        .FindElement(By.XPath("/html/body/div[1]/div/span[2]/div/span/div/div/div/div/div/div[1]")).Text
-                        .Contains("O número de telefone compartilhado através de url é inválido."))
-                    {
-                        Console.WriteLine($"     [ERRO] {contact.Name} - {contact.Number} (Número inválido)");
-                        Log($"[ERRO] {contact.Name} - {contact.Number} (Número inválido)\n");
-                        chromeDriver
-                            .FindElement(
-                                By.XPath("/html/body/div[1]/div/span[2]/div/span/div/div/div/div/div/div[2]/div"))
-                            .Click();
-                        continue;
-                    }
-
-                }
-
-                while (!IsElementPresent(chromeDriver, By.ClassName("copyable-text")))
-                    Thread.Sleep(1000);
-
-                var messageField = chromeDriver.FindElementsByClassName("copyable-text").Last();
-                foreach (var line in personalMessage.Where(line => line != ""))
-                {
-                    messageField.SendKeys(line);
-                    while (!IsElementPresent(chromeDriver,
-                        By.XPath("/html/body/div[1]/div/div/div[4]/div/footer/div[1]/div[3]/button/span")))
-                        Thread.Sleep(1000);
-                    chromeDriver.FindElementByXPath("/html/body/div[1]/div/div/div[4]/div/footer/div[1]/div[3]/button/span").Click();
-                }
-
-                Console.WriteLine($"     [Mensagem enviada] {contact.Name} - {contact.Number}");
-                Thread.Sleep(2000);
-            }
         }
-        private static bool IsElementPresent(ChromeDriver driver, By by)
+        private static bool NavigateToContactUrl(string number)
         {
-            try
+            var treatedNumber = Regex.Replace(number, "[^0-9]", "");
+            if (treatedNumber.Substring(0, 2) != "55")
+                treatedNumber = "55" + treatedNumber;
+
+            ChromeDriver.Navigate().GoToUrl($"http://web.whatsapp.com/send?phone={treatedNumber}");
+
+            if (IsAlertPresent())
+                ChromeDriver.SwitchTo().Alert().Accept();
+
+            while (!IsElementPresent(By.ClassName("copyable-text")))
+                Thread.Sleep(1500);
+
+            if (IsElementPresent(By.ClassName("_9a59P")))
             {
-                driver.FindElement(by);
-                return true;
+                if (ChromeDriver.FindElement(By.ClassName("_9a59P")).Text.Contains("O número de telefone compartilhado através de url é inválido."))
+                    return false;
             }
-            catch
-            {
-                return false;
-            }
+
+            return true;
         }
-        private static bool IsAlertPresent(ChromeDriver driver)
+        private static void SendMessage(Contact contact)
         {
-            try
+            if (ChromeDriver.FindElementsByClassName("copyable-text").Count < 2)
             {
-                driver.SwitchTo().Alert();
-                return true;
+                Console.WriteLine($"     [ERRO] {contact.Name} - {contact.Number} (Não foi possível enviar, tente novamente)");
+                Log($"[ERRO] {contact.Name} - {contact.Number} (Não foi possível enviar, tente novamente)\n");
             }
-            catch
+
+            var personalMessage = Message.Select(line => line.Replace("#nome", contact.Name)).ToList();
+            var messageField = ChromeDriver.FindElementsByClassName("copyable-text").Last();
+
+            foreach (var line in personalMessage.Where(line => line != ""))
             {
-                return false;
+                messageField.SendKeys(line);
+                while (!IsElementPresent(By.XPath("/html/body/div[1]/div/div/div[4]/div/footer/div[1]/div[3]/button/span")))
+                    Thread.Sleep(500);
+                ChromeDriver.FindElementByXPath("/html/body/div[1]/div/div/div[4]/div/footer/div[1]/div[3]/button/span").Click();
+                Thread.Sleep(600);
             }
         }
-        private static void Log(string logMessage) => File.AppendAllText($@"{CurrentDirectoryPath}\Log.txt", logMessage);
+        private static void RemoveContactFromWorksheet(Contact contact)
+        {
+            ExcelPackage.LicenseContext = LicenseContext.NonCommercial;
+
+            var spreadsheetFilePath = Directory.GetFiles(CurrentDirectoryPath, "*.*").First(f => f.EndsWith(".xlsx") || f.EndsWith(".xls"));
+            using (var package = new ExcelPackage(new FileInfo(spreadsheetFilePath.Split('/').Last())))
+            {
+                var worksheet = package.Workbook.Worksheets.First();
+                worksheet.DeleteRow(contact.Row);
+            }
+        }
+
+        public static string CurrentDirectoryPath { get; private set; } = Directory.GetCurrentDirectory();
+        public static List<Contact> Contacts { get; private set; }
+        public static IEnumerable<string> Message { get; private set; }
+        public static ChromeDriver ChromeDriver { get; private set; }
     }
 }
