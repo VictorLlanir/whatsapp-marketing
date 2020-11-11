@@ -15,7 +15,6 @@ namespace WhatsappMarketing
     {
         static void Main(string[] args)
         {
-
             Console.WriteLine("|--------------------------------------------------|");
             Console.WriteLine("                WHATSAPP MARKETING                  ");
             Console.WriteLine("|--------------------------------------------------|");
@@ -43,26 +42,30 @@ namespace WhatsappMarketing
             Console.WriteLine(">> ENVIANDO MENSAGENS");
             foreach (var contact in Contacts)
             {
-                var couldNavigate = NavigateToContactUrl(contact.Number);
-                if (!couldNavigate)
+                try
                 {
-                    if (!string.IsNullOrEmpty(contact.SecondNumber))
-                        couldNavigate = NavigateToContactUrl(contact.SecondNumber);
-
+                    var couldNavigate = NavigateToContactUrl(contact.Number);
                     if (!couldNavigate)
                     {
-                        Console.WriteLine($"     [ERRO] {contact.Name} - {contact.Number} / {contact.SecondNumber} (Número inválido)");
-                        Log($"[ERRO] {contact.Name} - {contact.Number} / {contact.SecondNumber} (Número inválido)\n");
-                        continue;
-                    }
-                }
+                        if (!string.IsNullOrEmpty(contact.SecondNumber))
+                            couldNavigate = NavigateToContactUrl(contact.SecondNumber);
 
-                SendMessage(contact);
-                RemoveContactFromWorksheet(contact);
-                Console.WriteLine($"     [Mensagem enviada] {contact.Name} - {contact.Number}");
-                Console.WriteLine("");
-                Console.WriteLine("");
-                Thread.Sleep(1000);
+                        if (!couldNavigate)
+                        {
+                            Console.WriteLine($"     [ERRO] {contact.Name} - {contact.Number} / {contact.SecondNumber} (Número inválido)");
+                            Log($"[ERRO] {contact.Name} - {contact.Number} / {contact.SecondNumber} (Número inválido)\n");
+                            continue;
+                        }
+                    }
+
+                    SendMessage(contact);
+                    Console.WriteLine($"     [Mensagem enviada] {contact.Name} - {contact.Number}");
+                    Thread.Sleep(1000);
+                }
+                catch
+                {
+                    continue;
+                }
             }
         }
         private static bool IsElementPresent(By by)
@@ -84,7 +87,7 @@ namespace WhatsappMarketing
                 ChromeDriver.SwitchTo().Alert();
                 return true;
             }
-            catch (NoSuchElementException)
+            catch (NoAlertPresentException)
             {
                 return false;
             }
@@ -133,6 +136,10 @@ namespace WhatsappMarketing
                 treatedNumber = "55" + treatedNumber;
 
             ChromeDriver.Navigate().GoToUrl($"http://web.whatsapp.com/send?phone={treatedNumber}");
+            Thread.Sleep(2000);
+
+            while (!IsElementPresent(By.ClassName("copyable-text")))
+                Thread.Sleep(1500);
 
             if (IsAlertPresent())
                 ChromeDriver.SwitchTo().Alert().Accept();
@@ -154,6 +161,8 @@ namespace WhatsappMarketing
             {
                 Console.WriteLine($"     [ERRO] {contact.Name} - {contact.Number} (Não foi possível enviar, tente novamente)");
                 Log($"[ERRO] {contact.Name} - {contact.Number} (Não foi possível enviar, tente novamente)\n");
+
+                return;
             }
 
             var personalMessage = Message.Select(line => line.Replace("#nome", contact.Name)).ToList();
@@ -167,6 +176,8 @@ namespace WhatsappMarketing
                 ChromeDriver.FindElementByXPath("/html/body/div[1]/div/div/div[4]/div/footer/div[1]/div[3]/button/span").Click();
                 Thread.Sleep(600);
             }
+             
+            RemoveContactFromWorksheet(contact);
         }
         private static void RemoveContactFromWorksheet(Contact contact)
         {
@@ -177,11 +188,12 @@ namespace WhatsappMarketing
             {
                 var worksheet = package.Workbook.Worksheets.First();
                 worksheet.DeleteRow(contact.Row);
+                package.Save();
             }
         }
 
         public static string CurrentDirectoryPath { get; private set; } = Directory.GetCurrentDirectory();
-        public static List<Contact> Contacts { get; private set; }
+        public static List<Contact> Contacts { get; private set; } = new List<Contact>();
         public static IEnumerable<string> Message { get; private set; }
         public static ChromeDriver ChromeDriver { get; private set; }
     }
