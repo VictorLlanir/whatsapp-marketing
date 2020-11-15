@@ -1,10 +1,12 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Drawing;
 using System.IO;
 using System.Linq;
 using System.Text.RegularExpressions;
 using System.Threading;
 using OfficeOpenXml;
+using OfficeOpenXml.Style;
 using OpenQA.Selenium;
 using OpenQA.Selenium.Chrome;
 using Whatsapp.Marketing.Entities;
@@ -15,7 +17,7 @@ namespace WhatsappMarketing
     {
         static void Main(string[] args)
         {
-            RowsToRemove = new List<int>();
+            SuccessfullRows = new List<int>();
             Console.WriteLine("|--------------------------------------------------|");
             Console.WriteLine("                WHATSAPP MARKETING                  ");
             Console.WriteLine("|--------------------------------------------------|");
@@ -45,29 +47,35 @@ namespace WhatsappMarketing
             {
                 try
                 {
-                    var couldNavigate = NavigateToContactUrl(contact.Number);
-                    if (!couldNavigate)
+                    NavigateToContactUrl(contact.Number);
+                    if (IsElementPresent(By.ClassName("_9a59P")))
                     {
-                        if (!string.IsNullOrEmpty(contact.SecondNumber))
-                            couldNavigate = NavigateToContactUrl(contact.SecondNumber);
-
-                        if (!couldNavigate)
+                        if (ChromeDriver.FindElement(By.ClassName("_9a59P")).Text.Contains("O número de telefone compartilhado através de url é inválido."))
                         {
-                            Console.WriteLine($"     [ERRO] {contact.Name} - {contact.Number} / {contact.SecondNumber} (Número inválido)");
-                            Log($"[ERRO] {contact.Name} - {contact.Number} / {contact.SecondNumber} (Número inválido)\n");
-                            continue;
+                            NavigateToContactUrl(contact.SecondNumber);
+                            if (IsElementPresent(By.ClassName("_9a59P")))
+                            {
+                                if (ChromeDriver.FindElement(By.ClassName("_9a59P")).Text.Contains("O número de telefone compartilhado através de url é inválido."))
+                                {
+                                    Console.WriteLine($"     [ERRO] {contact.Name} - {contact.Number} / {contact.SecondNumber} (Número inválido)");
+                                    Log($"[ERRO] {contact.Name} - {contact.Number} / {contact.SecondNumber} (Número inválido)\n");
+                                    continue;
+                                }
+                            }
                         }
+                        Thread.Sleep(5000);
                     }
 
                     SendMessage(contact);
+
                     Console.WriteLine($"     [Mensagem enviada] {contact.Name} - {contact.Number}");
 
-                    //if (IsElementPresent(By.ClassName("_1qPwk")))
-                    //{
-                    //    if (ChromeDriver.FindElementsByClassName("_1qPwk").Last().FindElement(By.TagName("span")).GetAttribute("aria-label") == " Pendente ")
-                    //        Thread.Sleep(1000);
-                    //}
-                    Thread.Sleep(10000);
+                    if (IsElementPresent(By.ClassName("_1qPwk")))
+                    {
+                        while (ChromeDriver.FindElementsByClassName("_1qPwk").Last().FindElement(By.TagName("span")).GetAttribute("aria-label").Contains("Pendente"))
+                            Thread.Sleep(1000);
+                    }
+                    Thread.Sleep(5000);
                 }
                 catch (Exception e)
                 {
@@ -78,6 +86,7 @@ namespace WhatsappMarketing
 
             ChromeDriver.Close();
             ChromeDriver.Dispose();
+            ColorSuccessfullRows();
             Console.ReadLine();
         }
         private static bool IsElementPresent(By by)
@@ -122,7 +131,7 @@ namespace WhatsappMarketing
                 for (int i = 2; i <= lastRow; i++)
                 {
                     Contacts.Add(new Contact(worksheet.Cells[$"A{i}"].Text, worksheet.Cells[$"B{i}"].Text, worksheet.Cells[$"C{i}"].Text));
-                    RowsToRemove.Add(i);
+                    SuccessfullRows.Add(i);
                 }
             }
         }
@@ -144,10 +153,11 @@ namespace WhatsappMarketing
                 throw;
             }
         }
-        private static bool NavigateToContactUrl(string number)
+        private static void NavigateToContactUrl(string number)
         {
             var treatedNumber = Regex.Replace(number, "[^0-9]", "");
-            treatedNumber = treatedNumber.TrimStart('0');            if (treatedNumber.Substring(0, 2) != "55")
+            treatedNumber = treatedNumber.TrimStart('0');
+            if (treatedNumber.Substring(0, 2) != "55")
                 treatedNumber = "55" + treatedNumber;
 
             ChromeDriver.Navigate().GoToUrl($"http://web.whatsapp.com/send?phone={treatedNumber}");
@@ -161,25 +171,9 @@ namespace WhatsappMarketing
 
             while (!IsElementPresent(By.ClassName("copyable-text")))
                 Thread.Sleep(1500);
-
-            if (IsElementPresent(By.ClassName("_9a59P")))
-            {
-                if (ChromeDriver.FindElement(By.ClassName("_9a59P")).Text.Contains("O número de telefone compartilhado através de url é inválido."))
-                    return false;
-            }
-
-            return true;
         }
         private static void SendMessage(Contact contact)
         {
-            if (ChromeDriver.FindElementsByClassName("copyable-text").Count < 2)
-            {
-                Console.WriteLine($"     [ERRO] {contact.Name} - {contact.Number} (Não foi possível enviar, tente novamente)");
-                Log($"[ERRO] {contact.Name} - {contact.Number} (Não foi possível enviar, tente novamente)\n");
-
-                return;
-            }
-
             var personalMessage = Message.Select(line => line.Replace("#nome", contact.Name)).ToList();
             var messageField = ChromeDriver.FindElementsByClassName("copyable-text").Last();
 
@@ -191,16 +185,17 @@ namespace WhatsappMarketing
                 ChromeDriver.FindElementByXPath("/html/body/div[1]/div/div/div[4]/div/footer/div[1]/div[3]/button/span").Click();
                 Thread.Sleep(600);
             }
+            Thread.Sleep(2000);
         }
-        private static void RemoveRowsFromWorksheet()
+        private static void ColorSuccessfullRows()
         {
             ExcelPackage.LicenseContext = LicenseContext.NonCommercial;
 
             var spreadsheetFilePath = Directory.GetFiles(CurrentDirectoryPath, "*.*").First(f => f.EndsWith(".xlsx") || f.EndsWith(".xls"));
             var package = new ExcelPackage(new FileInfo(spreadsheetFilePath.Split('/').Last()));
             var worksheet = package.Workbook.Worksheets.First();
-            foreach (var row in RowsToRemove)
-                worksheet.DeleteRow(row);
+            foreach (var row in SuccessfullRows)
+                worksheet.Cells[$"A{row}"].Style.Fill.SetBackground(Color.Green, ExcelFillStyle.Solid);
 
             package.Save();
             package.Dispose();
@@ -210,6 +205,6 @@ namespace WhatsappMarketing
         public static List<Contact> Contacts { get; private set; } = new List<Contact>();
         public static IEnumerable<string> Message { get; private set; }
         public static ChromeDriver ChromeDriver { get; private set; }
-        public static List<int> RowsToRemove { get; private set; }
+        public static List<int> SuccessfullRows { get; private set; }
     }
 }
