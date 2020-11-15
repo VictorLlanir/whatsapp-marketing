@@ -15,6 +15,7 @@ namespace WhatsappMarketing
     {
         static void Main(string[] args)
         {
+            RowsToRemove = new List<int>();
             Console.WriteLine("|--------------------------------------------------|");
             Console.WriteLine("                WHATSAPP MARKETING                  ");
             Console.WriteLine("|--------------------------------------------------|");
@@ -60,13 +61,24 @@ namespace WhatsappMarketing
 
                     SendMessage(contact);
                     Console.WriteLine($"     [Mensagem enviada] {contact.Name} - {contact.Number}");
-                    Thread.Sleep(1000);
+
+                    //if (IsElementPresent(By.ClassName("_1qPwk")))
+                    //{
+                    //    if (ChromeDriver.FindElementsByClassName("_1qPwk").Last().FindElement(By.TagName("span")).GetAttribute("aria-label") == " Pendente ")
+                    //        Thread.Sleep(1000);
+                    //}
+                    Thread.Sleep(10000);
                 }
-                catch
+                catch (Exception e)
                 {
+                    Console.WriteLine($"     [ERRO] {contact.Name} - {contact.Number} ({e.Message})");
                     continue;
                 }
             }
+
+            ChromeDriver.Close();
+            ChromeDriver.Dispose();
+            Console.ReadLine();
         }
         private static bool IsElementPresent(By by)
         {
@@ -107,8 +119,11 @@ namespace WhatsappMarketing
             {
                 var worksheet = package.Workbook.Worksheets.First();
                 var lastRow = worksheet.Dimension.End.Row + 1;
-                for (int i = 2; i < lastRow; i++)
-                    Contacts.Add(new Contact(worksheet.Cells[$"A{i}"].Text, worksheet.Cells[$"B{i}"].Text, worksheet.Cells[$"C{i}"].Text, i));
+                for (int i = 2; i <= lastRow; i++)
+                {
+                    Contacts.Add(new Contact(worksheet.Cells[$"A{i}"].Text, worksheet.Cells[$"B{i}"].Text, worksheet.Cells[$"C{i}"].Text));
+                    RowsToRemove.Add(i);
+                }
             }
         }
         private static void OpenChromeDriverAndWaitForAuthentication()
@@ -132,7 +147,7 @@ namespace WhatsappMarketing
         private static bool NavigateToContactUrl(string number)
         {
             var treatedNumber = Regex.Replace(number, "[^0-9]", "");
-            if (treatedNumber.Substring(0, 2) != "55")
+            treatedNumber = treatedNumber.TrimStart('0');            if (treatedNumber.Substring(0, 2) != "55")
                 treatedNumber = "55" + treatedNumber;
 
             ChromeDriver.Navigate().GoToUrl($"http://web.whatsapp.com/send?phone={treatedNumber}");
@@ -176,25 +191,25 @@ namespace WhatsappMarketing
                 ChromeDriver.FindElementByXPath("/html/body/div[1]/div/div/div[4]/div/footer/div[1]/div[3]/button/span").Click();
                 Thread.Sleep(600);
             }
-             
-            RemoveContactFromWorksheet(contact);
         }
-        private static void RemoveContactFromWorksheet(Contact contact)
+        private static void RemoveRowsFromWorksheet()
         {
             ExcelPackage.LicenseContext = LicenseContext.NonCommercial;
 
             var spreadsheetFilePath = Directory.GetFiles(CurrentDirectoryPath, "*.*").First(f => f.EndsWith(".xlsx") || f.EndsWith(".xls"));
-            using (var package = new ExcelPackage(new FileInfo(spreadsheetFilePath.Split('/').Last())))
-            {
-                var worksheet = package.Workbook.Worksheets.First();
-                worksheet.DeleteRow(contact.Row);
-                package.Save();
-            }
+            var package = new ExcelPackage(new FileInfo(spreadsheetFilePath.Split('/').Last()));
+            var worksheet = package.Workbook.Worksheets.First();
+            foreach (var row in RowsToRemove)
+                worksheet.DeleteRow(row);
+
+            package.Save();
+            package.Dispose();
         }
 
         public static string CurrentDirectoryPath { get; private set; } = Directory.GetCurrentDirectory();
         public static List<Contact> Contacts { get; private set; } = new List<Contact>();
         public static IEnumerable<string> Message { get; private set; }
         public static ChromeDriver ChromeDriver { get; private set; }
+        public static List<int> RowsToRemove { get; private set; }
     }
 }
