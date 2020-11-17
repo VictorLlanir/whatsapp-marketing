@@ -17,7 +17,6 @@ namespace WhatsappMarketing
     {
         static void Main(string[] args)
         {
-            SuccessfullRows = new List<int>();
             Console.WriteLine("|--------------------------------------------------|");
             Console.WriteLine("                WHATSAPP MARKETING                  ");
             Console.WriteLine("|--------------------------------------------------|");
@@ -50,18 +49,26 @@ namespace WhatsappMarketing
                     NavigateToContactUrl(contact.Number);
                     if (IsElementPresent(By.ClassName("_9a59P")))
                     {
-                        if (ChromeDriver.FindElement(By.ClassName("_9a59P")).Text.Contains("O número de telefone compartilhado através de url é inválido."))
+                        while (!IsElementPresent(By.XPath("/html/body/div[1]/div/div/div[4]/div/footer/div[1]/div[2]/div/div[2]")) || !IsElementPresent(By.ClassName("_9a59P")))
+                            Thread.Sleep(2000);
+
+                        if (ChromeDriver.FindElement(By.ClassName("_9a59P")).Text.Contains("inválido") || ChromeDriver.FindElement(By.ClassName("_9a59P")).Text.Contains("invalid"))
                         {
-                            NavigateToContactUrl(contact.SecondNumber);
+                            if (!string.IsNullOrEmpty(contact.SecondNumber))
+                                NavigateToContactUrl(contact.SecondNumber);
+
                             if (IsElementPresent(By.ClassName("_9a59P")))
                             {
-                                if (ChromeDriver.FindElement(By.ClassName("_9a59P")).Text.Contains("O número de telefone compartilhado através de url é inválido."))
+                                Thread.Sleep(2000);
+                                if (ChromeDriver.FindElement(By.ClassName("_9a59P")).Text.Contains("inválido") || ChromeDriver.FindElement(By.ClassName("_9a59P")).Text.Contains("invalid"))
                                 {
+                                    ColorErrorRow(contact.Row);
                                     Console.WriteLine($"     [ERRO] {contact.Name} - {contact.Number} / {contact.SecondNumber} (Número inválido)");
                                     Log($"[ERRO] {contact.Name} - {contact.Number} / {contact.SecondNumber} (Número inválido)\n");
                                     continue;
                                 }
                             }
+
                         }
                         Thread.Sleep(5000);
                     }
@@ -80,14 +87,13 @@ namespace WhatsappMarketing
                 catch (Exception e)
                 {
                     Console.WriteLine($"     [ERRO] {contact.Name} - {contact.Number} ({e.Message})");
+                    Log($"[ERRO] {contact.Name} - {contact.Number} / {contact.SecondNumber} ({e.Message})\n");
                     continue;
                 }
             }
 
             ChromeDriver.Close();
             ChromeDriver.Dispose();
-            ColorSuccessfullRows();
-            Console.ReadLine();
         }
         private static bool IsElementPresent(By by)
         {
@@ -130,8 +136,7 @@ namespace WhatsappMarketing
                 var lastRow = worksheet.Dimension.End.Row + 1;
                 for (int i = 2; i <= lastRow; i++)
                 {
-                    Contacts.Add(new Contact(worksheet.Cells[$"A{i}"].Text, worksheet.Cells[$"B{i}"].Text, worksheet.Cells[$"C{i}"].Text));
-                    SuccessfullRows.Add(i);
+                    Contacts.Add(new Contact(worksheet.Cells[$"A{i}"].Text, worksheet.Cells[$"B{i}"].Text, worksheet.Cells[$"C{i}"].Text, i));
                 }
             }
         }
@@ -160,6 +165,9 @@ namespace WhatsappMarketing
             if (treatedNumber.Substring(0, 2) != "55")
                 treatedNumber = "55" + treatedNumber;
 
+            if (treatedNumber.Length > 13)
+                treatedNumber = treatedNumber.Substring(0, 13);
+
             ChromeDriver.Navigate().GoToUrl($"http://web.whatsapp.com/send?phone={treatedNumber}");
             Thread.Sleep(2000);
 
@@ -175,7 +183,7 @@ namespace WhatsappMarketing
         private static void SendMessage(Contact contact)
         {
             var personalMessage = Message.Select(line => line.Replace("#nome", contact.Name)).ToList();
-            var messageField = ChromeDriver.FindElementsByClassName("copyable-text").Last();
+            var messageField = ChromeDriver.FindElementByXPath("/html/body/div[1]/div/div/div[4]/div/footer/div[1]/div[2]/div/div[2]");
 
             foreach (var line in personalMessage.Where(line => line != ""))
             {
@@ -185,17 +193,29 @@ namespace WhatsappMarketing
                 ChromeDriver.FindElementByXPath("/html/body/div[1]/div/div/div[4]/div/footer/div[1]/div[3]/button/span").Click();
                 Thread.Sleep(600);
             }
+            ColorSuccessfullRow(contact.Row);
             Thread.Sleep(2000);
         }
-        private static void ColorSuccessfullRows()
+        private static void ColorSuccessfullRow(int row)
         {
             ExcelPackage.LicenseContext = LicenseContext.NonCommercial;
 
             var spreadsheetFilePath = Directory.GetFiles(CurrentDirectoryPath, "*.*").First(f => f.EndsWith(".xlsx") || f.EndsWith(".xls"));
             var package = new ExcelPackage(new FileInfo(spreadsheetFilePath.Split('/').Last()));
             var worksheet = package.Workbook.Worksheets.First();
-            foreach (var row in SuccessfullRows)
-                worksheet.Cells[$"A{row}"].Style.Fill.SetBackground(Color.Green, ExcelFillStyle.Solid);
+            worksheet.Cells[$"A{row}"].Style.Fill.SetBackground(Color.Green, ExcelFillStyle.Solid);
+
+            package.Save();
+            package.Dispose();
+        }
+        private static void ColorErrorRow(int row)
+        {
+            ExcelPackage.LicenseContext = LicenseContext.NonCommercial;
+
+            var spreadsheetFilePath = Directory.GetFiles(CurrentDirectoryPath, "*.*").First(f => f.EndsWith(".xlsx") || f.EndsWith(".xls"));
+            var package = new ExcelPackage(new FileInfo(spreadsheetFilePath.Split('/').Last()));
+            var worksheet = package.Workbook.Worksheets.First();
+            worksheet.Cells[$"A{row}"].Style.Fill.SetBackground(Color.Red, ExcelFillStyle.Solid);
 
             package.Save();
             package.Dispose();
@@ -205,6 +225,5 @@ namespace WhatsappMarketing
         public static List<Contact> Contacts { get; private set; } = new List<Contact>();
         public static IEnumerable<string> Message { get; private set; }
         public static ChromeDriver ChromeDriver { get; private set; }
-        public static List<int> SuccessfullRows { get; private set; }
     }
 }
