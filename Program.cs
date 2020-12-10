@@ -47,20 +47,20 @@ namespace WhatsappMarketing
                 try
                 {
                     NavigateToContactUrl(contact.Number);
-                    if (IsElementPresent(By.ClassName("_9a59P")))
+                    if (IsElementPresent(By.XPath("/html/body/div[1]/div/span[2]/div/span/div/div/div/div/div/div[1]")))
                     {
-                        while (!IsElementPresent(By.XPath("/html/body/div[1]/div/div/div[4]/div/footer/div[1]/div[2]/div/div[2]")) || !IsElementPresent(By.ClassName("_9a59P")))
+                        while (!IsElementPresent(By.XPath("/html/body/div[1]/div/div/div[4]/div/footer/div[1]/div[2]/div/div[2]")) && !IsElementPresent(By.XPath("/html/body/div[1]/div/span[2]/div/span/div/div/div/div/div/div[1]")))
                             Thread.Sleep(2000);
 
-                        if (ChromeDriver.FindElement(By.ClassName("_9a59P")).Text.Contains("inválido") || ChromeDriver.FindElement(By.ClassName("_9a59P")).Text.Contains("invalid"))
+                        if (ChromeDriver.FindElement(By.XPath("/html/body/div[1]/div/span[2]/div/span/div/div/div/div/div/div[1]")).Text.Contains("inválido") || ChromeDriver.FindElement(By.XPath("/html/body/div[1]/div/span[2]/div/span/div/div/div/div/div/div[1]")).Text.Contains("invalid"))
                         {
                             if (!string.IsNullOrEmpty(contact.SecondNumber))
                                 NavigateToContactUrl(contact.SecondNumber);
 
-                            if (IsElementPresent(By.ClassName("_9a59P")))
+                            if (IsElementPresent(By.XPath("/html/body/div[1]/div/span[2]/div/span/div/div/div/div/div/div[1]")))
                             {
                                 Thread.Sleep(2000);
-                                if (ChromeDriver.FindElement(By.ClassName("_9a59P")).Text.Contains("inválido") || ChromeDriver.FindElement(By.ClassName("_9a59P")).Text.Contains("invalid"))
+                                if (ChromeDriver.FindElement(By.XPath("/html/body/div[1]/div/span[2]/div/span/div/div/div/div/div/div[1]")).Text.Contains("inválido") || ChromeDriver.FindElement(By.XPath("/html/body/div[1]/div/span[2]/div/span/div/div/div/div/div/div[1]")).Text.Contains("invalid"))
                                 {
                                     ColorErrorRow(contact.Row);
                                     Console.WriteLine($"     [ERRO] {contact.Name} - {contact.Number} / {contact.SecondNumber} (Número inválido)");
@@ -77,9 +77,9 @@ namespace WhatsappMarketing
 
                     Console.WriteLine($"     [Mensagem enviada] {contact.Name} - {contact.Number}");
 
-                    if (IsElementPresent(By.ClassName("_1qPwk")))
+                    if (IsElementPresent(By.XPath("/html/body/div[1]/div/div/div[4]/div/div[3]/div/div/div[3]/div[20]/div/div/div/div[2]/div/div")))
                     {
-                        while (ChromeDriver.FindElementsByClassName("_1qPwk").Last().FindElement(By.TagName("span")).GetAttribute("aria-label").Contains("Pendente"))
+                        while (ChromeDriver.FindElementsByXPath("/html/body/div[1]/div/div/div[4]/div/div[3]/div/div/div[3]/div[20]/div/div/div/div[2]/div/div").Last().FindElement(By.TagName("span")).GetAttribute("aria-label").Contains("Pendente"))
                             Thread.Sleep(1000);
                     }
                     Thread.Sleep(5000);
