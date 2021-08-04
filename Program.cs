@@ -183,18 +183,22 @@ namespace WhatsappMarketing
         private static void SendMessage(Contact contact)
         {
             var personalMessage = Message.Select(line => line.Replace("#nome", contact.Name)).ToList();
-            var messageField = ChromeDriver.FindElementByXPath("/html/body/div[1]/div/div/div[4]/div/footer/div[1]/div[2]/div/div[2]");
+            var messageField = ChromeDriver.FindElementByXPath("/html/body/div/div[1]/div[1]/div[4]/div[1]/footer/div[1]/div[2]/div/div[1]/div/div[2]");
+            var sendMessageButton = ChromeDriver.FindElementByXPath("/html/body/div/div[1]/div[1]/div[4]/div[1]/footer/div[1]/div[2]/div/div[2]");
+            Thread.Sleep(800);
 
             foreach (var line in personalMessage.Where(line => line != ""))
             {
+                messageField.Click();
                 messageField.SendKeys(line);
-                while (!IsElementPresent(By.XPath("/html/body/div[1]/div/div/div[4]/div/footer/div[1]/div[3]/button/span")))
+                Thread.Sleep(800);
+                sendMessageButton.Click();
+
+                while (IsElementPresent(By.XPath("span[@aria-label='Pendente']")))
                     Thread.Sleep(500);
-                ChromeDriver.FindElementByXPath("/html/body/div[1]/div/div/div[4]/div/footer/div[1]/div[3]/button/span").Click();
-                Thread.Sleep(600);
             }
             ColorSuccessfullRow(contact.Row);
-            Thread.Sleep(2000);
+            Thread.Sleep(1000);
         }
         private static void ColorSuccessfullRow(int row)
         {
