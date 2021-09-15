@@ -183,8 +183,7 @@ namespace WhatsappMarketing
         private static void SendMessage(Contact contact)
         {
             var personalMessage = Message.Select(line => line.Replace("#nome", contact.Name)).ToList();
-            var messageField = ChromeDriver.FindElementByXPath("/html/body/div/div[1]/div[1]/div[4]/div[1]/footer/div[1]/div[2]/div/div[1]/div/div[2]");
-            var sendMessageButton = ChromeDriver.FindElementByXPath("/html/body/div/div[1]/div[1]/div[4]/div[1]/footer/div[1]/div[2]/div/div[2]");
+            var messageField = ChromeDriver.FindElementByXPath("/html/body/div[1]/div[1]/div[1]/div[4]/div[1]/footer/div[1]/div/div/div[2]/div[1]/div");
             Thread.Sleep(800);
 
             foreach (var line in personalMessage.Where(line => line != ""))
@@ -192,6 +191,7 @@ namespace WhatsappMarketing
                 messageField.Click();
                 messageField.SendKeys(line);
                 Thread.Sleep(800);
+                var sendMessageButton = ChromeDriver.FindElementByXPath("/html/body/div[1]/div[1]/div[1]/div[4]/div[1]/footer/div[1]/div/div/div[2]/div[2]/button/span");
                 sendMessageButton.Click();
 
                 while (IsElementPresent(By.XPath("span[@aria-label='Pendente']")))
